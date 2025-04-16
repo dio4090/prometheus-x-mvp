@@ -1,0 +1,97 @@
+version: '3'
+services:
+  mongodb:
+    container_name: "mongodb"
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - ptx-network
+
+  catalog-api:
+    container_name: "catalog-api"
+    build:
+      context: ./catalog
+      dockerfile: docker/app/Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongodb
+    env_file:
+      - ./catalog/.env
+    environment:
+      MONGO_HOST: mongodb
+    networks:
+      - ptx-network
+
+  contract-manager:
+    container_name: "contract-manager"
+    build:
+      context: ./contract-manager
+      dockerfile: docker/app/Dockerfile
+    ports:
+      - "3001:3001"
+    depends_on:
+      - mongodb
+      - catalog-api
+    env_file:
+      - ./contract-manager/.env
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/contract-manager
+    volumes:
+      - ./contract-manager/contract-agent.config.json:/usr/src/app/contract-agent.config.json
+    networks:
+      - ptx-network
+
+  provider-connector:
+    container_name: "provider-connector"
+    build:
+      context: ./provider/connector
+      dockerfile: docker/app/Dockerfile
+    ports:
+      - "4000:3002"
+    depends_on:
+      - mongodb
+      - catalog-api
+      - contract-manager
+    env_file:
+      - ./provider/connector/.env
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/provider-connector
+      PORT: 3002
+    volumes:
+      - ./provider/connector/.env.production:/usr/src/app/.env.production
+      - ./provider/connector/src/config.production.json:/usr/src/app/src/config.production.json
+    networks:
+      - ptx-network
+
+  consumer-connector:
+    container_name: "consumer-connector"
+    build:
+      context: ./consumer/connector
+      dockerfile: docker/app/Dockerfile
+    ports:
+      - "4001:3002"
+    depends_on:
+      - mongodb
+      - catalog-api
+      - contract-manager
+    env_file:
+      - ./consumer/connector/.env
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/consumer-connector
+      PORT: 3002
+    volumes:
+      - ./consumer/connector/.env.production:/usr/src/app/.env.production
+      - ./consumer/connector/src/config.production.json:/usr/src/app/src/config.production.json
+    networks:
+      - ptx-network
+
+networks:
+  ptx-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
